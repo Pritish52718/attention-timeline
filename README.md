@@ -17,6 +17,8 @@ It then walks forward in **launch order**. Each mechanism is shown as a response
 
 ERA V5, Session 8 assignment (The School of AI).
 
+**Live page:** https://pritish52718.github.io/attention-timeline/
+
 ## What's on the page
 
 | Section | What it teaches |
