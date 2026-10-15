@@ -1,0 +1,474 @@
+<title>How Does Attention Work Now?</title>
+<meta name="description" content="A chronological, visual history of attention mechanisms: what each one fixed, what it cost, and what the next paper had to fix.">
+<style>
+/* Layout: a lab notebook. One readable column; the core attention lab first, then a dated
+   timeline down a left rule, each entry a "problem -> change -> trade" record. */
+:root {
+  --bg: #F2F4F7;
+  --surface: #FFFFFF;
+  --ink: #131A24;
+  --muted: #566173;
+  --rule: #D6DCE4;
+  --accent: #2C40BF;
+  --heat: 214, 76, 18;          /* attention-weight colour, as rgb triplet */
+  --cell: #E7EBF0;
+  --good: #1E7B3A;
+  --bad: #B3261E;
+  --t-exact: #2350C2;
+  --t-position: #7637B0;
+  --t-length: #8C6300;
+  --t-decode: #B8234B;
+  --t-sparse: #1F7A35;
+  --t-state: #0A6B7D;
+  --t-compress: #4F5B6E;
+  --f-display: Georgia, "Iowan Old Style", "Times New Roman", serif;
+  --f-body: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, "Cascadia Mono", monospace;
+  --radius: 6px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0D121A; --surface: #141B26; --ink: #E5E9F0; --muted: #97A2B4; --rule: #273242;
+    --accent: #8E9CFF; --heat: 255, 138, 61; --cell: #1C2532; --good: #5CC27A; --bad: #FF7A70;
+    --t-exact: #7C9DFF; --t-position: #BE8EF2; --t-length: #DDB045; --t-decode: #F2729A;
+    --t-sparse: #62C47A; --t-state: #41BFD3; --t-compress: #A0AABB;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0D121A; --surface: #141B26; --ink: #E5E9F0; --muted: #97A2B4; --rule: #273242;
+  --accent: #8E9CFF; --heat: 255, 138, 61; --cell: #1C2532; --good: #5CC27A; --bad: #FF7A70;
+  --t-exact: #7C9DFF; --t-position: #BE8EF2; --t-length: #DDB045; --t-decode: #F2729A;
+  --t-sparse: #62C47A; --t-state: #41BFD3; --t-compress: #A0AABB;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 400 16px/1.6 var(--f-body); }
+a { color: var(--accent); text-underline-offset: 2px; }
+a:hover { text-decoration-thickness: 2px; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 3px; }
+h1, h2, h3 { font-family: var(--f-display); font-weight: 600; text-wrap: balance; margin: 0; line-height: 1.15; }
+p { margin: 0; }
+code, .mono { font-family: var(--f-mono); font-size: .88em; }
+
+.wrap { max-width: 1080px; margin: 0 auto; padding-inline: 20px; }
+@media (max-width: 480px) { .wrap { padding-inline: 16px; } }
+
+/* top bar */
+.bar { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; background: color-mix(in srgb, var(--bg) 90%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--rule); }
+.bar .wrap { display: flex; gap: 18px; align-items: center; padding-block: 10px; overflow-x: auto; scrollbar-width: none; }
+.bar .brand { font-family: var(--f-display); font-style: italic; font-weight: 600; white-space: nowrap; }
+.bar nav { display: flex; gap: 14px; font-size: 14px; }
+.bar nav a { color: var(--muted); text-decoration: none; white-space: nowrap; }
+.bar nav a:hover { color: var(--ink); }
+
+/* hero */
+header.hero { padding-block: 56px 28px; }
+.eyebrow { font: 600 12px/1 var(--f-body); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); }
+.hero h1 { font-size: clamp(2.3rem, 5.5vw, 4.1rem); font-style: italic; margin-top: 14px; letter-spacing: -.01em; }
+.hero .lede { max-width: 64ch; margin-top: 18px; font-size: 1.08rem; color: var(--muted); }
+.hero .lede strong { color: var(--ink); font-weight: 500; }
+.formula { font-family: var(--f-display); font-size: 1.35rem; margin-top: 22px; }
+.formula i { font-style: italic; }
+
+section { padding-block: 36px; }
+section > .wrap > h2 { font-size: clamp(1.6rem, 3vw, 2.2rem); }
+.sec-intro { max-width: 66ch; color: var(--muted); margin-top: 10px; }
+
+/* panels */
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: var(--radius); }
+
+/* ---------- attention lab ---------- */
+.lab { margin-top: 22px; padding: 20px; display: grid; gap: 20px; }
+.steps { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.step-btn { font: 500 14px var(--f-body); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 6px 14px; cursor: pointer; }
+.step-btn .n { font-family: var(--f-mono); color: var(--muted); margin-right: 6px; }
+.step-btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.step-btn[aria-pressed="true"] .n { color: inherit; opacity: .7; }
+.step-arrow { color: var(--muted); font-family: var(--f-mono); }
+.ctrl { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; color: var(--muted); }
+.ctrl input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--accent); }
+.lab-grid { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: 24px; align-items: start; }
+@media (max-width: 820px) { .lab-grid { grid-template-columns: minmax(0, 1fr); } }
+.qkv { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 980px) { .qkv { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .qkv { grid-template-columns: minmax(0, 1fr); } }
+.proj-eq { display: flex; flex-wrap: wrap; gap: 8px 10px; align-items: center; margin-top: 10px; }
+.proj-eq table.mat.small td { min-width: 30px; }
+.proj-eq .op { font-family: var(--f-mono); font-size: 1.2rem; color: var(--muted); padding-top: 18px; }
+pre.calc { margin: 8px 0 0; padding: 10px 12px; background: var(--cell); border-radius: 4px; font-family: var(--f-mono); font-size: 12.5px; line-height: 1.6; white-space: pre; width: max-content; min-width: 100%; box-sizing: border-box; }
+.build { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
+.build ol { margin: 8px 0 0; padding-left: 22px; }
+.build li + li { margin-top: 18px; }
+.build li::marker { font-family: var(--f-mono); font-weight: 600; color: var(--muted); }
+.build h4 { margin: 0; font: 600 15.5px/1.35 var(--f-body); }
+.build p { margin-top: 4px; font-size: 15px; max-width: 78ch; }
+.mat-label { font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); margin-bottom: 6px; display: flex; justify-content: space-between; gap: 8px; }
+.mat-label span:last-child { text-transform: none; letter-spacing: 0; font-weight: 400; font-family: var(--f-mono); }
+.scroll-x { overflow-x: auto; }
+table.mat { border-collapse: separate; border-spacing: 2px; font-family: var(--f-mono); font-size: 12px; font-variant-numeric: tabular-nums; }
+table.mat th { font-weight: 400; color: var(--muted); padding: 2px 6px; text-align: right; white-space: nowrap; }
+table.mat thead th { text-align: center; font-size: 11px; }
+table.mat td { min-width: 44px; padding: 5px 6px; text-align: right; border-radius: 3px; background: var(--cell); color: var(--ink); }
+table.mat.small td { min-width: 34px; padding: 3px 5px; font-size: 11px; }
+table.mat td.neg-inf { background: repeating-linear-gradient(135deg, var(--cell) 0 4px, transparent 4px 8px); color: var(--muted); text-align: center; }
+table.mat tr.focus th { color: var(--ink); font-weight: 600; }
+table.mat tr.focus td { outline: 1.5px solid var(--ink); outline-offset: -1.5px; }
+table.mat tbody th { cursor: pointer; }
+.explain { font-size: 15px; max-width: 70ch; }
+.explain .say { font-family: var(--f-display); font-size: 1.18rem; line-height: 1.4; }
+.explain .sub { color: var(--muted); margin-top: 8px; }
+.explain .sub .blk { display: block; }
+.explain .sub .blk + .blk { margin-top: 8px; }
+.out-note { margin-top: 10px; font-size: 14px; color: var(--muted); }
+
+/* costs */
+.costs { margin-top: 22px; padding: 20px; display: grid; gap: 18px; }
+.slider-row { display: flex; flex-wrap: wrap; gap: 12px 18px; align-items: center; }
+.slider-row label { font-size: 14px; color: var(--muted); }
+.slider-row input[type="range"] { flex: 1 1 240px; accent-color: var(--accent); }
+.slider-row label { min-width: 11.5em; }
+.slider-row output { font-family: var(--f-mono); font-size: 15px; min-width: 9ch; }
+.cost-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+@media (max-width: 760px) { .cost-grid { grid-template-columns: minmax(0, 1fr); } }
+.cost { border-top: 2px solid var(--ink); padding-top: 10px; min-width: 0; }
+.cost .k { font-size: 13px; color: var(--muted); }
+.cost .v { font-family: var(--f-mono); font-size: 1.45rem; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.cost .g { font-size: 13px; margin-top: 6px; }
+.cost.c1 { border-color: var(--t-exact); } .cost.c2 { border-color: var(--t-decode); } .cost.c3 { border-color: var(--t-position); }
+.fineprint { font-size: 13px; color: var(--muted); }
+.story { margin-top: 22px; padding: 20px 22px; }
+.story ol { margin: 0; padding-left: 24px; }
+.story li + li { margin-top: 20px; }
+.story li::marker { font-family: var(--f-mono); font-weight: 600; color: var(--muted); }
+.story h4 { margin: 0; font: 600 16px/1.35 var(--f-body); }
+.story p { margin-top: 4px; max-width: 76ch; }
+.story .calc { width: auto; max-width: 100%; overflow-x: auto; }
+.story .aside { font-size: 14px; color: var(--muted); margin-top: 8px; }
+h3.try { font-size: 1.3rem; margin-top: 30px; }
+.try + .costs { margin-top: 12px; }
+.conclusion { margin-top: 18px; padding: 14px 16px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 0 4px 4px 0; }
+.conclusion p { max-width: 80ch; }
+.fineprint b { color: var(--ink); font-weight: 600; }
+.calc-line { font-family: var(--f-mono); font-size: 12px; color: var(--muted); margin-top: 6px; overflow-wrap: anywhere; }
+h2 .part { display: inline-flex; align-items: center; justify-content: center; width: 1.5em; height: 1.5em; margin-right: .45em; border-radius: 50%; border: 1.5px solid currentColor; font: 600 .55em/1 var(--f-body); vertical-align: .35em; }
+.regroup { margin-top: 22px; padding: 20px; }
+.rg-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 20px; }
+@media (max-width: 760px) { .rg-grid { grid-template-columns: minmax(0, 1fr); } }
+.rg { min-width: 0; }
+.rg-f { font-family: var(--f-display); font-size: 1.3rem; margin: 2px 0 4px; }
+.rg p { font-size: 14.5px; margin-top: 10px; }
+.rg .calc { width: auto; overflow-x: auto; }
+ul.catch { margin: 6px 0 0; padding-left: 18px; font-size: 15px; }
+ul.catch li + li { margin-top: 4px; }
+.bridge { margin-top: 18px; padding: 12px 14px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 0 4px 4px 0; }
+
+/* ---------- priority map ---------- */
+.map { margin-top: 22px; padding: 16px 12px 8px; }
+.map svg { display: block; width: 100%; min-width: 680px; height: auto; }
+.map text { font-family: var(--f-body); }
+.map .dot { cursor: pointer; }
+.map .dot:hover circle, .map .dot:focus circle { stroke: var(--ink); stroke-width: 2; }
+
+/* thread chips */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.chip { --c: var(--muted); display: inline-flex; align-items: center; gap: 7px; font: 500 13px var(--f-body); color: var(--ink); background: transparent; border: 1px solid var(--rule); border-radius: 999px; padding: 5px 12px; cursor: pointer; }
+.chip::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--c); }
+.chip[aria-pressed="true"] { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, transparent); }
+.chip.all::before { display: none; }
+.tag { --c: var(--muted); display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--f-body); color: var(--c); }
+.tag::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+
+/* ---------- timeline ---------- */
+.timeline { margin-top: 26px; position: relative; }
+.era { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 24px; padding-block: 34px 14px; }
+.era .yrs { font-family: var(--f-mono); font-size: 13px; color: var(--muted); padding-top: 8px; }
+.era h3 { font-size: 1.75rem; font-style: italic; }
+.era p { color: var(--muted); max-width: 66ch; margin-top: 8px; }
+.entry { display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 24px; padding-block: 12px; transition: opacity .2s; scroll-margin-top: 70px; }
+.entry.dim { opacity: .28; }
+.entry .when { position: relative; padding-top: 22px; text-align: right; }
+.entry .when .d { font-family: var(--f-mono); font-size: 13px; font-weight: 600; }
+.entry .when .y { font-family: var(--f-display); font-size: 1.6rem; color: var(--muted); line-height: 1; margin-top: 4px; }
+@media (max-width: 720px) {
+  .era, .entry { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .entry .when { text-align: left; padding-top: 0; display: flex; gap: 10px; align-items: baseline; }
+  .entry .when .y { font-size: 1rem; margin: 0; }
+}
+.card { padding: 22px 24px; min-width: 0; }
+@media (max-width: 480px) { .card { padding: 18px 16px; } }
+.card-head { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: baseline; }
+.card h3 { font-size: 1.5rem; flex: 1 1 100%; }
+.card .who { font-size: 14px; color: var(--muted); }
+.card .srcs { font-family: var(--f-mono); font-size: 12px; display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.badge-added { font: 600 11px var(--f-body); letter-spacing: .06em; text-transform: uppercase; color: var(--accent); border: 1px solid currentColor; border-radius: 3px; padding: 1px 6px; }
+.responds { font-size: 14px; color: var(--muted); margin-top: 12px; }
+.responds a { font-weight: 500; }
+.card .body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; margin-top: 14px; }
+.card .body.has-fig { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); align-items: start; }
+@media (max-width: 900px) { .card .body.has-fig { grid-template-columns: minmax(0, 1fr); } }
+.lbl { font: 600 12px var(--f-body); letter-spacing: .1em; text-transform: uppercase; color: var(--muted); margin-bottom: 4px; }
+.txt p + .lbl { margin-top: 14px; }
+.note { margin-top: 14px; font-size: 14px; padding: 10px 12px; border-left: 3px solid var(--accent); background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 0 4px 4px 0; }
+.note b { font-weight: 600; }
+.note.cls { border-left-color: var(--t-state); background: color-mix(in srgb, var(--t-state) 8%, transparent); }
+.trade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule); }
+@media (max-width: 760px) { .trade { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.trade ul { margin: 0; padding-left: 18px; font-size: 14.5px; }
+.trade li + li { margin-top: 5px; }
+.trade .buys .lbl { color: var(--good); }
+.trade .gives .lbl { color: var(--bad); }
+.trade p { font-size: 14.5px; }
+.leaves { margin-top: 14px; font-size: 14px; color: var(--muted); }
+.leaves span { color: var(--ink); font-family: var(--f-display); font-style: italic; font-size: 1.05rem; }
+
+/* figures */
+.fig { min-width: 0; }
+.fig canvas { display: block; max-width: 100%; height: auto; image-rendering: pixelated; border-radius: 3px; }
+.fig .cap { font-size: 13px; color: var(--muted); margin-top: 8px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12.5px; color: var(--muted); margin-top: 8px; }
+.legend i { display: inline-block; width: 11px; height: 11px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.mini-ctl { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: 13px; color: var(--muted); margin-top: 10px; }
+.mini-ctl input[type="range"] { flex: 1 1 140px; accent-color: var(--accent); }
+.mini-ctl output { font-family: var(--f-mono); color: var(--ink); }
+.seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; overflow: hidden; }
+.seg button { font: 500 13px var(--f-body); background: transparent; color: var(--muted); border: 0; padding: 5px 12px; cursor: pointer; }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+.btn { font: 500 13px var(--f-body); background: transparent; color: var(--ink); border: 1px solid var(--rule); border-radius: 4px; padding: 5px 10px; cursor: pointer; }
+.btn:disabled { opacity: .4; cursor: default; }
+.fig svg { display: block; width: 100%; height: auto; }
+.fig svg text { font-family: var(--f-body); }
+
+/* memory lab */
+.mem-toks { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.mem-tok { font-size: 12.5px; border: 1px solid var(--rule); border-radius: 4px; padding: 4px 8px; color: var(--muted); }
+.mem-tok.cur { border-color: var(--ink); color: var(--ink); font-weight: 500; }
+.mem-tok.past { color: var(--ink); }
+.mem-grid { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; align-items: start; margin-top: 12px; }
+.mem-calc { font-family: var(--f-mono); font-size: 12px; line-height: 1.6; color: var(--muted); white-space: pre-wrap; }
+.readout { display: grid; gap: 6px; margin-top: 12px; font-size: 13.5px; }
+.readout div { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.readout .ans { font-family: var(--f-mono); }
+.readout .ok { color: var(--good); font-weight: 600; }
+.readout .no { color: var(--bad); font-weight: 600; }
+.readout .fade { color: var(--t-length); font-weight: 600; }
+
+/* kv bars */
+.kvbars { display: grid; gap: 8px; margin-top: 12px; }
+.kvrow { display: grid; grid-template-columns: 92px minmax(0, 1fr) 76px; gap: 10px; align-items: center; font-size: 13px; }
+.kvrow .track { height: 14px; background: var(--cell); border-radius: 2px; overflow: hidden; }
+.kvrow .fill { height: 100%; background: var(--t-decode); border-radius: 2px; }
+.kvrow .val { font-family: var(--f-mono); font-size: 12.5px; text-align: right; font-variant-numeric: tabular-nums; }
+.kvrow .nm { font-weight: 500; }
+
+/* sections after timeline */
+table.choose { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 15px; }
+table.choose th { text-align: left; font: 600 12px var(--f-body); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 8px 12px; border-bottom: 1.5px solid var(--ink); }
+table.choose td { padding: 12px; border-bottom: 1px solid var(--rule); vertical-align: top; }
+table.choose td:first-child { font-family: var(--f-display); font-size: 1.08rem; font-weight: 600; min-width: 170px; }
+table.choose td:last-child { color: var(--muted); }
+.fixes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; margin-top: 20px; }
+@media (max-width: 760px) { .fixes { grid-template-columns: minmax(0, 1fr); } }
+.fix { padding: 16px 18px; }
+.fix h3 { font-size: 1.12rem; }
+.fix p { margin-top: 6px; font-size: 14.5px; color: var(--muted); }
+details.gloss { margin-top: 18px; padding: 12px 16px; }
+details.gloss summary { cursor: pointer; font-weight: 500; }
+dl.gloss { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px 18px; margin: 14px 0 4px; font-size: 14.5px; }
+@media (max-width: 600px) { dl.gloss { grid-template-columns: minmax(0, 1fr); gap: 2px; } dl.gloss dd { margin-bottom: 8px; } }
+dl.gloss dt { font-family: var(--f-mono); font-size: 13px; font-weight: 600; }
+dl.gloss dd { margin: 0; color: var(--muted); }
+ol.sources { margin-top: 18px; padding-left: 22px; columns: 2; column-gap: 36px; font-size: 14px; }
+@media (max-width: 760px) { ol.sources { columns: 1; } }
+ol.sources li { break-inside: avoid; margin-bottom: 6px; }
+ol.sources .d { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+footer { padding-block: 30px 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--rule); margin-top: 20px; }
+</style>
+
+<div class="bar">
+  <div class="wrap">
+    <span class="brand">Attention, in order</span>
+    <nav aria-label="Sections">
+      <a href="#mechanism">1 · How it works</a>
+      <a href="#costs">2 · The cost</a>
+      <a href="#regroup">3 · A way out?</a>
+      <a href="#timeline">4 · The story</a>
+      <a href="#map">Looking back</a>
+      <a href="#choose">Choosing</a>
+      <a href="#corrections">Date checks</a>
+      <a href="#sources">Sources</a>
+    </nav>
+  </div>
+</div>
+
+<header class="hero wrap">
+  <div class="eyebrow">A field guide · 2014 to 2026</div>
+  <h1>How does attention work now?</h1>
+  <p class="lede">A story in four parts. <strong>First</strong>, how attention works, with real numbers. <strong>Second</strong>, what it costs once the text gets long. <strong>Third</strong>, one tempting way out. <strong>Then</strong> back to the beginning: twelve years of fixes in <strong>launch order</strong>, each one solving a problem and creating the next.</p>
+  <div class="formula" aria-label="Attention formula">Attention(<i>Q</i>, <i>K</i>, <i>V</i>) = softmax( mask( <i>QK</i><sup>T</sup> / √<i>d</i> ) ) · <i>V</i></div>
+</header>
+
+<section id="mechanism">
+  <div class="wrap">
+    <h2><span class="part">1</span>How attention works</h2>
+    <p class="sec-intro">A model reads text as tokens, roughly words. Each token is turned into a list of numbers, a vector, written <em>x</em>. Attention is how one token looks at the others and brings back what it needs. Below is the whole thing on five tokens with four numbers each, with real arithmetic at every step. Start at step 0 and work to the right. Click a word in any table to follow that word instead. The numbers are hand-made so that <em>bank</em>, which could mean money or a riverside, has a reason to look at <em>river</em>.</p>
+    <div class="panel lab" id="lab">
+      <div class="steps" role="group" aria-label="Pipeline step" id="lab-steps"></div>
+      <div class="qkv" id="lab-qkv"></div>
+      <div class="lab-grid">
+        <div class="explain"><p class="say" id="lab-say"></p><p class="sub" id="lab-sub"></p></div>
+        <div style="min-width:0">
+          <div id="lab-proj"></div>
+          <div id="lab-matwrap">
+            <div class="mat-label"><span id="lab-mat-title">Scores</span><span id="lab-mat-shape"></span></div>
+            <div class="scroll-x"><table class="mat" id="lab-mat"></table></div>
+            <div class="steps" style="margin-top:12px">
+              <label class="ctrl"><input type="checkbox" id="lab-causal" checked> Causal mask: a token may not look at words after it</label>
+            </div>
+            <div class="out-note" id="lab-out-note"></div>
+            <div class="scroll-x" style="margin-top:6px"><table class="mat small" id="lab-out"></table></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="costs">
+  <div class="wrap">
+    <h2><span class="part">2</span>Then the context grows</h2>
+    <p class="sec-intro">In the lab, 5 tokens made a 5 × 5 table. Now give the same mechanism a long document: 262,144 tokens, roughly 200,000 English words, a long novel. Follow the arithmetic for one real-sized model (32 layers, 32 heads of 128 numbers, 2 bytes per number).</p>
+
+    <div class="panel story">
+      <ol>
+        <li><h4>Every token scores every token</h4>
+          <p>Q is a list of N queries and Kᵀ a list of N keys, so Q·Kᵀ is an N × N table: one score for every pair.</p>
+          <pre class="calc">N = 5          →  5 × 5             = 25 scores          (the lab)
+N = 1,000      →  1,000 × 1,000     = 1,000,000 scores
+N = 262,144    →  262,144 × 262,144 = 68,719,476,736 scores   (68.7 billion)</pre></li>
+        <li><h4>Each score takes memory, and every head has its own table</h4>
+          <p>One score is stored in 2 bytes. A layer has 32 heads, each building its own N × N table.</p>
+          <pre class="calc">68.7 billion scores × 2 bytes = 137 GB      one head
+137 GB × 32 heads             = 4.40 TB     one layer, one user
+
+one 80 GB GPU holds 80 GB  →  4.40 TB is 55 GPUs’ worth</pre>
+          <p class="aside">Honest limit: this is what a naive implementation would store. FlashAttention (2022, in the story below) computes the table in small pieces and never keeps it whole. But the 68.7 billion scores still have to be computed, per head, per layer.</p></li>
+        <li><h4>The memory that cannot be avoided: the KV cache</h4>
+          <p>When the model writes a reply, it keeps every earlier token’s key and value in every layer, so it does not recompute them for each new word.</p>
+          <pre class="calc">one token  = 2 (K and V) × 32 layers × 4,096 numbers × 2 bytes = 524 KB
+262,144 tokens × 524 KB                                     = 137 GB   one user</pre></li>
+        <li><h4>Every user needs their own</h4>
+          <p>Model weights are loaded once and shared. A cache belongs to one conversation, so it multiplies.</p>
+          <pre class="calc">137 GB × 8 users = 1.10 TB</pre></li>
+        <li><h4>And the model has never practised this far</h4>
+          <p>It was trained on texts of 4,096 tokens. At 262,144, only 4,096 ÷ 262,144 = 1.56% of the positions were ever seen in training.</p></li>
+      </ol>
+    </div>
+
+    <h3 class="try">Try it: move the sliders</h3>
+    <div class="panel costs">
+      <div class="slider-row">
+        <label for="n-slider">Context length N</label>
+        <input type="range" id="n-slider" min="9" max="20" step="1" value="18">
+        <output id="n-out"></output>
+      </div>
+      <div class="slider-row">
+        <label for="b-slider">Users served at once</label>
+        <input type="range" id="b-slider" min="0" max="6" step="1" value="0">
+        <output id="b-out"></output>
+      </div>
+      <div class="cost-grid">
+        <div class="cost c1"><div class="k">Score table, one layer</div><div class="v" id="c-scores"></div><div class="g" id="c-scores-g"></div></div>
+        <div class="cost c2"><div class="k">KV cache, all users</div><div class="v" id="c-kv"></div><div class="g" id="c-kv-g"></div></div>
+        <div class="cost c3"><div class="k">Positions seen in training</div><div class="v" id="c-pos"></div><div class="g" id="c-pos-g"></div></div>
+      </div>
+    </div>
+
+    <div class="conclusion">
+      <div class="lbl">Conclusion</div>
+      <p>Standard attention pays for length twice. The score work grows with <b>N²</b>: double the text, four times the work. The KV cache grows with <b>N × users</b>: double either, twice the memory. At 262,144 tokens, one user’s cache alone (137 GB) does not fit on an 80 GB GPU. Everything after this point is an attempt to shrink one of these bills.</p>
+    </div>
+  </div>
+</section>
+
+<section id="regroup">
+  <div class="wrap">
+    <h2><span class="part">3</span>One way out: drop the softmax?</h2>
+    <p class="sec-intro">Look at the order of the multiplication. Softmax wraps Q·Kᵀ, so the N × N table has to be built before V is touched. Remove softmax and matrix multiplication lets the brackets move.</p>
+    <div class="panel regroup">
+      <div class="rg-grid">
+        <div class="rg">
+          <div class="lbl">With softmax · standard attention</div>
+          <div class="rg-f">softmax( Q·Kᵀ ) · V</div>
+          <pre class="calc">Q · Kᵀ = [N × 128] · [128 × N] = [N × N]
+<span id="rg-nn"></span></pre>
+          <p>Grows with N². Per user, the model keeps <b id="rg-kv"></b> of KV cache, and it grows with every token.</p>
+        </div>
+        <div class="rg">
+          <div class="lbl">Without softmax · linear attention</div>
+          <div class="rg-f">Q · ( Kᵀ·V )</div>
+          <pre class="calc">Kᵀ · V = [128 × N] · [N × 128] = [128 × 128]
+<span id="rg-dd"></span></pre>
+          <p>N has vanished from the shape. Per user, the model keeps a fixed <b id="rg-state"></b> of state (32 layers × 32 heads × 128 × 128 × 2 bytes), at 10 tokens or 10 million.</p>
+        </div>
+      </div>
+      <div class="lbl" style="margin-top:18px">The catch</div>
+      <ul class="catch">
+        <li><b>No more focus.</b> Softmax made the weights positive and add up to 1, so tokens compete and one word can win. Raw scores do not compete.</li>
+        <li><b>Memories blur.</b> Every token is added into the same fixed table. Write “meeting at 2 pm”, then “moved to 5 pm”, and the table reads back 7.</li>
+        <li><b>So it trailed softmax</b> on exact recall, finding one specific fact far back, for years.</li>
+      </ul>
+      <p class="bridge">This idea is from 2020. It took a delta rule (2021), a way to train it in parallel (2024) and a forget gate (late 2024) before it could stand beside softmax, and even then only mixed with it. Meanwhile others attacked the same bills in completely different ways. <b>Let’s start from the beginning.</b></p>
+    </div>
+  </div>
+</section>
+
+<section id="timeline">
+  <div class="wrap">
+    <h2><span class="part">4</span>Let’s start from the beginning</h2>
+    <p class="sec-intro">Each entry answers the same questions: what was there before, what problem people hit, what fixed it, and what new problem the fix created. Ordered by first public release (arXiv v1 date, or the post date when there is no paper). Entries marked <span class="badge-added">added</span> were not on the class list. Highlight one concern to follow its thread.</p>
+    <details class="panel gloss"><summary>Words used in the cards, in plain terms</summary><dl class="gloss" id="gloss"></dl></details>
+    <div class="chips" id="chips" role="group" aria-label="Highlight a concern"></div>
+    <div class="timeline" id="tl"></div>
+  </div>
+</section>
+
+<section id="map">
+  <div class="wrap">
+    <h2>Looking back: how the priorities moved</h2>
+    <p class="sec-intro">The whole story on one chart. Each dot is one entry, placed by launch date and coloured by the cost it attacks; a ring marks a secondary concern. Read left to right: exact attention first, then decoding memory and position, then longer contexts, then recurrent state, sparsity and compression returning together. Click a dot to jump back to its entry.</p>
+    <div class="panel map scroll-x"><svg id="map-svg" role="img" aria-label="Timeline of attention mechanisms by concern"></svg></div>
+  </div>
+</section>
+
+<section id="choose">
+  <div class="wrap">
+    <h2>So which one would I choose?</h2>
+    <p class="sec-intro">None of these is good or bad in isolation. An architecture has a workload. The same mechanism can be right for a 2K chatbot and wrong for a 1M-token agent.</p>
+    <div class="scroll-x"><table class="choose" id="choose-table"><thead><tr><th>Workload</th><th>Reasonable choice</th><th>Why</th></tr></thead><tbody></tbody></table></div>
+  </div>
+</section>
+
+<section id="corrections">
+  <div class="wrap">
+    <h2>Dates I had to check twice</h2>
+    <p class="sec-intro">Dates are where confident sentences go wrong. These are the places where the usual story, the class notes, or the assignment's list disagreed with the primary source.</p>
+    <div class="fixes" id="fixes"></div>
+  </div>
+</section>
+
+<section id="sources">
+  <div class="wrap">
+    <h2>Sources for the chronology</h2>
+    <p class="sec-intro">Each date was checked against the source listed with it: the arXiv v1 submission date, the original post, or the release announcement. Numbers quoted from papers are the authors' own claims and were not reproduced here.</p>
+    <ol class="sources" id="src-list"></ol>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">Built for ERA V5, Session 8 (The School of AI). The arithmetic in the lab, the memory demo and the cost meters runs live in your browser.</div>
+</footer>
